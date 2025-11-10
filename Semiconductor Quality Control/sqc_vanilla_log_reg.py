@@ -10,7 +10,6 @@ df = pd.read_csv('/Users/aryankulkarni/Documents/UC Berkeley Coursework/SDSE/La_
 print(df.describe())
 y = df['Tm']
 x = df.drop(['Tm', 'id', 'SMILES'], axis = 1)
-print(x)
 
 #Splitting training dataframe for testing different hyperparameters
 X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
