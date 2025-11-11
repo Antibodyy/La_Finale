@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 df = pd.read_csv('/Users/aryankulkarni/Documents/UC Berkeley Coursework/SDSE/La_Finale/Semiconductor Quality Control/semiconductor_quality_control.csv')
 print(df.describe())
+print(df.head())
 y = df['Defect']
 sybau = ['Process_ID', 'Timestamp', 'Wafer_ID', 'Defect', 'Join_Status']
 x = df.drop(columns=sybau)
