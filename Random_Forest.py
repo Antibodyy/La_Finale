@@ -40,15 +40,18 @@ class_weights_list = [
     # {0: 1, 1: 1.25}, {0: 1, 1: 1.3},
     # {0: 1, 1: 1.4}, {0: 1, 1: 1.5}, 
     # {0: 1, 1: 1.55},
-    # {0: 1, 1: 1.575},
-    # {0: 1, 1: 1.6}, 
-    # {0: 1, 1: 1.625}, 
-    # {0: 1, 1: 1.675},
-    # {0: 1, 1: 1.69},
-    {0: 1, 1: 1.7},
-    # {0: 1, 1: 1.71},
-    # {0: 1, 1: 1.725},
-    # {0: 1, 1: 1.75},
+    {0: 1, 1: 1.575},
+    {0: 1, 1: 1.6}, 
+    {0: 1, 1: 1.625}, 
+    {0: 1, 1: 1.675},
+    {0: 1, 1: 1.698},
+    {0: 1, 1: 1.699},
+    {0: 1, 1: 1.700},
+    {0: 1, 1: 1.701},
+    {0: 1, 1: 1.702},
+    {0: 1, 1: 1.71},
+    {0: 1, 1: 1.725},
+    {0: 1, 1: 1.75},
     # {0: 1, 1: 2}, {0: 1, 1: 2.2}, {0: 1, 1: 2.5}, {0: 1, 1: 2.75},
     # {0: 1, 1: 3}, {0: 1, 1: 3.5}, {0: 1, 1: 4}, {0: 1, 1: 4.5},
     # {0: 1, 1: 5}, {0: 1, 1: 5.5}, {0: 1, 1: 6}, {0: 1, 1: 7},
@@ -56,12 +59,17 @@ class_weights_list = [
     #   "balanced"
 ]
 
-thresholds = np.arange(0.3, 0.9, 0.05)
+thresholds = np.arange(0.3, 0.9, 0.001)
 
 # -------------------------------
 # Train and evaluate ensemble for each class weight
 # -------------------------------
 results = []
+
+best_cm = None
+best_cm_model_info = None
+best_cm_f1 = 0
+best_cm_threshold = None
 
 for cw in class_weights_list:
     print(f"\nTesting Class Weight: {cw}")
@@ -78,7 +86,7 @@ for cw in class_weights_list:
         y_train_bal = balanced_train['Defect']
 
         rf = RandomForestClassifier(
-            n_estimators=230,
+            n_estimators=240,
             max_depth=70,
             min_samples_split=10,
             min_samples_leaf=5,
@@ -111,6 +119,16 @@ for cw in class_weights_list:
     rec = recall_score(y_test_global, y_pred_final, zero_division=0)
     f1 = f1_score(y_test_global, y_pred_final, zero_division=0)
 
+    cm = confusion_matrix(y_test_global, y_pred_final)
+
+    # If this model has the best F1, store its confusion matrix
+    if f1 > best_cm_f1:
+        best_cm_f1 = f1
+        best_cm = cm
+        best_cm_threshold = best_thresh
+        best_cm_model_info = cw
+
+
     # Store results
     results.append({
         "class_weight": cw,
@@ -127,6 +145,7 @@ for cw in class_weights_list:
     print(f"Precision: {prec:.4f}")
     print(f"Recall: {rec:.4f}")
     print(f"F1 Score: {f1:.4f}")
+    print(f"Confusion Matrix:\n{cm}")
 
 # -------------------------------
 # Print summary of all results
@@ -168,9 +187,13 @@ print(f"precision: {best_overall['precision']:.4f}")
 print(f"recall: {best_overall['recall']:.4f}")
 print(f"f1: {best_overall['f1']:.4f}")
 
-cm = confusion_matrix(y_test_global, y_pred_final)
+print("\n==================================================")
+print("BEST CONFUSION MATRIX (by highest F1 score)")
+print(f"Class Weight: {best_cm_model_info}")
+print(f"Threshold: {best_cm_threshold}")
+print(f"Best F1: {best_cm_f1}")
 
-# Display it nicely
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
-disp.plot(cmap='Blues')
-print("Confusion Matrix:\n", cm)
+print("\nConfusion Matrix:")
+print(best_cm)
+
+
