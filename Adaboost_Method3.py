@@ -22,7 +22,8 @@ from sklearn.metrics import recall_score
 # Method 3, None of the above
 rng_seed = 42
 
-raw_data = pd.read_csv('C:\\Users\\0hmse\\PycharmProjects\\Generic Environment\\Statistics\\Final Project\\semiconductor_quality_control.csv')
+raw_data = pd.read_csv('semiconductor_quality_control.csv')
+# raw_data = pd.read_csv('C:\\Users\\0hmse\\PycharmProjects\\Generic Environment\\Statistics\\Final Project\\semiconductor_quality_control.csv')
 features = raw_data[['Tool_Type','Chamber_Temperature','Gas_Flow_Rate','RF_Power','Etch_Depth','Rotation_Speed','Vacuum_Pressure','Stage_Alignment_Error','Vibration_Level','UV_Exposure_Intensity','Particle_Count']]
 features = pd.get_dummies(features, columns=['Tool_Type'], drop_first=False)
 defect = raw_data['Defect']
