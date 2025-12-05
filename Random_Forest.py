@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 # -------------------------------
 # Load dataset
@@ -35,11 +36,27 @@ X_train_global, X_test_global, y_train_global, y_test_global = train_test_split(
 # Define class weights and thresholds to try
 # -------------------------------
 class_weights_list = [
-    {0: 1, 1: 1.25}, {0: 1, 1: 1.5}, {0: 1, 1: 1.75},
-    {0: 1, 1: 2}, {0: 1, 1: 2.5}, {0: 1, 1: 3},
-    {0: 1, 1: 4}, {0: 1, 1: 5}, {0: 1, 1: 6}, "balanced"
+    # {0: 1, 1: 1.1}, {0: 1, 1: 1.2}, 
+    # {0: 1, 1: 1.25}, {0: 1, 1: 1.3},
+    # {0: 1, 1: 1.4}, {0: 1, 1: 1.5}, 
+    # {0: 1, 1: 1.55},
+    # {0: 1, 1: 1.575},
+    # {0: 1, 1: 1.6}, 
+    # {0: 1, 1: 1.625}, 
+    # {0: 1, 1: 1.675},
+    # {0: 1, 1: 1.69},
+    {0: 1, 1: 1.7},
+    # {0: 1, 1: 1.71},
+    # {0: 1, 1: 1.725},
+    # {0: 1, 1: 1.75},
+    # {0: 1, 1: 2}, {0: 1, 1: 2.2}, {0: 1, 1: 2.5}, {0: 1, 1: 2.75},
+    # {0: 1, 1: 3}, {0: 1, 1: 3.5}, {0: 1, 1: 4}, {0: 1, 1: 4.5},
+    # {0: 1, 1: 5}, {0: 1, 1: 5.5}, {0: 1, 1: 6}, {0: 1, 1: 7},
+    # {0: 1, 1: 8},
+    #   "balanced"
 ]
-thresholds = np.arange(0.3, 0.9, 0.01)
+
+thresholds = np.arange(0.3, 0.9, 0.05)
 
 # -------------------------------
 # Train and evaluate ensemble for each class weight
@@ -61,8 +78,8 @@ for cw in class_weights_list:
         y_train_bal = balanced_train['Defect']
 
         rf = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=10,
+            n_estimators=230,
+            max_depth=70,
             min_samples_split=10,
             min_samples_leaf=5,
             class_weight=cw,
@@ -120,3 +137,40 @@ for r in results:
     print(f"class_weight: {r['class_weight']}, threshold: {r['threshold']:.3f}, "
           f"accuracy: {r['accuracy']:.4f}, precision: {r['precision']:.4f}, "
           f"recall: {r['recall']:.4f}, f1: {r['f1']:.4f}")
+
+# -------------------------------
+# Print best by each metric
+# -------------------------------
+best_acc = max(results, key=lambda x: x['accuracy'])
+best_prec = max(results, key=lambda x: x['precision'])
+best_rec = max(results, key=lambda x: x['recall'])
+best_f1 = max(results, key=lambda x: x['f1'])
+
+print("\n==================================================")
+print("Best Configuration by Each Metric:")
+print(f"Highest Accuracy: class_weight={best_acc['class_weight']}, threshold={best_acc['threshold']:.3f}, accuracy={best_acc['accuracy']:.4f}")
+print(f"Highest Precision: class_weight={best_prec['class_weight']}, threshold={best_prec['threshold']:.3f}, precision={best_prec['precision']:.4f}")
+print(f"Highest Recall: class_weight={best_rec['class_weight']}, threshold={best_rec['threshold']:.3f}, recall={best_rec['recall']:.4f}")
+print(f"Highest F1 Score: class_weight={best_f1['class_weight']}, threshold={best_f1['threshold']:.3f}, f1={best_f1['f1']:.4f}")
+
+for r in results:
+    r['combined_score'] = r['accuracy'] + r['precision'] + r['recall'] + r['f1']
+
+# Find the best overall configuration
+best_overall = max(results, key=lambda x: x['combined_score'])
+
+print("\n==================================================")
+print("Best Overall Ensemble Configuration (considering all 4 metrics):")
+print(f"class_weight: {best_overall['class_weight']}")
+print(f"threshold: {best_overall['threshold']:.3f}")
+print(f"accuracy: {best_overall['accuracy']:.4f}")
+print(f"precision: {best_overall['precision']:.4f}")
+print(f"recall: {best_overall['recall']:.4f}")
+print(f"f1: {best_overall['f1']:.4f}")
+
+cm = confusion_matrix(y_test_global, y_pred_final)
+
+# Display it nicely
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+disp.plot(cmap='Blues')
+print("Confusion Matrix:\n", cm)
