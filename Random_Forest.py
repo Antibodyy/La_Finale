@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.preprocessing import LabelEncoder
 
 # -------------------------------
 # Load dataset
@@ -14,16 +15,11 @@ df = pd.read_csv('semiconductor_quality_control.csv')
 # Preprocessing
 # -------------------------------
 X = df.drop(['Defect', 'Process_ID', 'Wafer_ID', 'Timestamp', 'Join_Status'], axis=1)
-X = pd.get_dummies(X, columns=['Tool_Type'], drop_first=True)
-y = df['Defect']
 
-# -------------------------------
-# Split minority and majority
-# -------------------------------
-minority = df[df['Defect'] == 1]
-majority = df[df['Defect'] == 0]
-n_chunks = 4
-majority_chunks = np.array_split(majority, n_chunks)
+le = LabelEncoder()
+X['Tool_Type'] = le.fit_transform(X['Tool_Type'])
+
+y = df['Defect']
 
 # -------------------------------
 # Global test set
@@ -33,33 +29,28 @@ X_train_global, X_test_global, y_train_global, y_test_global = train_test_split(
 )
 
 # -------------------------------
+# Split minority and majority
+# -------------------------------
+
+n_chunks = 4
+
+train_df = pd.concat([X_train_global, y_train_global], axis=1)
+minority_train = train_df[train_df['Defect'] == 1]
+majority_train = train_df[train_df['Defect'] == 0]
+majority_chunks = np.array_split(majority_train, n_chunks)
+
+# -------------------------------
 # Define class weights and thresholds to try
 # -------------------------------
 class_weights_list = [
-    # {0: 1, 1: 1.1}, {0: 1, 1: 1.2}, 
-    # {0: 1, 1: 1.25}, {0: 1, 1: 1.3},
-    # {0: 1, 1: 1.4}, {0: 1, 1: 1.5}, 
-    # {0: 1, 1: 1.55},
-    # {0: 1, 1: 1.575},
-    # {0: 1, 1: 1.6}, 
-    # {0: 1, 1: 1.625}, 
-    # {0: 1, 1: 1.675},
-    # {0: 1, 1: 1.698},
-    # {0: 1, 1: 1.699},
-    # {0: 1, 1: 1.700},
-    # {0: 1, 1: 1.701},
-    # {0: 1, 1: 1.702},
-    {0: 1, 1: 1.71},
-    # {0: 1, 1: 1.725},
-    # {0: 1, 1: 1.75},
-    # {0: 1, 1: 2}, {0: 1, 1: 2.2}, {0: 1, 1: 2.5}, {0: 1, 1: 2.75},
-    # {0: 1, 1: 3}, {0: 1, 1: 3.5}, {0: 1, 1: 4}, {0: 1, 1: 4.5},
-    # {0: 1, 1: 5}, {0: 1, 1: 5.5}, {0: 1, 1: 6}, {0: 1, 1: 7},
-    # {0: 1, 1: 8},
-    #   "balanced"
+    {0:1, 1:8},
+    {0:1, 1:1.2},
+    {0:1, 1:1.3},
+    {0:1, 1:1.4},
+    {0:1, 1:1.5}
 ]
 
-thresholds = np.arange(0.3, 0.9, 0.001)
+thresholds = np.arange(0.4, 0.8, 0.01)
 
 # -------------------------------
 # Train and evaluate ensemble for each class weight
@@ -78,7 +69,7 @@ for cw in class_weights_list:
     # Train ensemble models
     for i, maj_chunk in enumerate(majority_chunks):
         print(f"Training Model {i+1}/{n_chunks} with class_weight={cw}")
-        balanced_train = pd.concat([maj_chunk, minority])
+        balanced_train = pd.concat([maj_chunk, minority_train])
 
         X_train_bal = balanced_train.drop('Defect', axis=1)
         X_train_bal = pd.get_dummies(X_train_bal, columns=['Tool_Type'], drop_first=True)
@@ -86,12 +77,14 @@ for cw in class_weights_list:
         y_train_bal = balanced_train['Defect']
 
         rf = RandomForestClassifier(
-            n_estimators=240,
-            max_depth=70,
+            n_estimators=200,
+            max_depth=30,
             min_samples_split=10,
-            min_samples_leaf=5,
+            min_samples_leaf=2,
             class_weight=cw,
-            random_state=67
+            random_state=67,
+            oob_score=True,
+            n_jobs=-1
         )
         rf.fit(X_train_bal, y_train_bal)
         rf_models.append(rf)
@@ -106,7 +99,7 @@ for cw in class_weights_list:
     best_f1 = 0
     best_thresh = 0.5
     for t in thresholds:
-        y_pred_thresh = (avg_probas >= t).astype(int)
+        y_pred_thresh = (rf.predict_proba(X_test_global)[:,1] >= t).astype(int)
         f1 = f1_score(y_test_global, y_pred_thresh, zero_division=0)
         if f1 > best_f1:
             best_f1 = f1
