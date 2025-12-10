@@ -95,15 +95,15 @@ for cw in class_weights_list:
         probas[:, i] = rf.predict_proba(X_test_global)[:, 1]
     avg_probas = probas.mean(axis=1)
 
-    # Threshold optimization
-    best_f1 = 0
-    best_thresh = 0.5
-    for t in thresholds:
-        y_pred_thresh = (rf.predict_proba(X_test_global)[:,1] >= t).astype(int)
-        f1 = f1_score(y_test_global, y_pred_thresh, zero_division=0)
-        if f1 > best_f1:
-            best_f1 = f1
-            best_thresh = t
+    # # Threshold optimization
+    # best_f1 = 0
+    # best_thresh = 0.5
+    # for t in thresholds:
+    #     y_pred_thresh = (avg_probas >= t).astype(int)
+    #     f1 = f1_score(y_test_global, y_pred_thresh, zero_division=0)
+    #     if f1 > best_f1:
+    #         best_f1 = f1
+    #         best_thresh = t
 
     # Final prediction and evaluation
     y_pred_final = (avg_probas >= best_thresh).astype(int)
