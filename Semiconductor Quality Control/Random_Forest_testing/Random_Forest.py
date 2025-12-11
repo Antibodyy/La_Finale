@@ -32,113 +32,115 @@ X_train_global, X_test_global, y_train_global, y_test_global = train_test_split(
 # Split minority and majority
 # -------------------------------
 
-n_chunks = 4
-
 train_df = pd.concat([X_train_global, y_train_global], axis=1)
 minority_train = train_df[train_df['Defect'] == 1]
 majority_train = train_df[train_df['Defect'] == 0]
-majority_chunks = np.array_split(majority_train, n_chunks)
 
-# -------------------------------
-# Define class weights and thresholds to try
-# -------------------------------
-class_weights_list = [
-    {0:1, 1:8},
-    {0:1, 1:1.2},
-    {0:1, 1:1.3},
-    {0:1, 1:1.4},
-    {0:1, 1:1.5}
-]
-
-thresholds = np.arange(0.4, 0.8, 0.01)
-
-# -------------------------------
-# Train and evaluate ensemble for each class weight
-# -------------------------------
-results = []
-
-best_cm = None
-best_cm_model_info = None
-best_cm_f1 = 0
-best_cm_threshold = None
-
-for cw in class_weights_list:
-    print(f"\nTesting Class Weight: {cw}")
-    rf_models = []
-
-    # Train ensemble models
-    for i, maj_chunk in enumerate(majority_chunks):
-        print(f"Training Model {i+1}/{n_chunks} with class_weight={cw}")
-        balanced_train = pd.concat([maj_chunk, minority_train])
-
-        X_train_bal = balanced_train.drop('Defect', axis=1)
-        X_train_bal = pd.get_dummies(X_train_bal, columns=['Tool_Type'], drop_first=True)
-        X_train_bal = X_train_bal.reindex(columns=X_train_global.columns, fill_value=0)
-        y_train_bal = balanced_train['Defect']
-
-        rf = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=30,
-            min_samples_split=10,
-            min_samples_leaf=2,
-            class_weight=cw,
-            random_state=67,
-            oob_score=True,
-            n_jobs=-1
-        )
-        rf.fit(X_train_bal, y_train_bal)
-        rf_models.append(rf)
-
-    # Ensemble prediction
-    probas = np.zeros((X_test_global.shape[0], len(rf_models)))
-    for i, rf in enumerate(rf_models):
-        probas[:, i] = rf.predict_proba(X_test_global)[:, 1]
-    avg_probas = probas.mean(axis=1)
-
-    # # Threshold optimization
-    best_f1 = 0
-    best_thresh = 0.5
-    for t in thresholds:
-        y_pred_thresh = (avg_probas >= t).astype(int)
-        f1 = f1_score(y_test_global, y_pred_thresh, zero_division=0)
-        if f1 > best_f1:
-            best_f1 = f1
-            best_thresh = t
-
-    # Final prediction and evaluation
-    y_pred_final = (avg_probas >= best_thresh).astype(int)
-    acc = accuracy_score(y_test_global, y_pred_final)
-    prec = precision_score(y_test_global, y_pred_final, zero_division=0)
-    rec = recall_score(y_test_global, y_pred_final, zero_division=0)
-    f1 = f1_score(y_test_global, y_pred_final, zero_division=0)
-
-    cm = confusion_matrix(y_test_global, y_pred_final)
-
-    # If this model has the best F1, store its confusion matrix
-    if f1 > best_cm_f1:
-        best_cm_f1 = f1
-        best_cm = cm
-        best_cm_threshold = best_thresh
-        best_cm_model_info = cw
+for n_chunks in [3, 4]:
 
 
-    # Store results
-    results.append({
-        "class_weight": cw,
-        "threshold": best_thresh,
-        "accuracy": acc,
-        "precision": prec,
-        "recall": rec,
-        "f1": f1
-    })
+    majority_chunks = np.array_split(majority_train, n_chunks)
 
-    # Print current configuration
-    print(f"Best Threshold: {best_thresh:.3f}")
-    print(f"Accuracy: {acc:.4f}")
-    print(f"Precision: {prec:.4f}")
-    print(f"Recall: {rec:.4f}")
-    print(f"F1 Score: {f1:.4f}")
-    print(f"Confusion Matrix:\n{cm}")
+    # -------------------------------
+    # Define class weights and thresholds to try
+    # -------------------------------
+    class_weights_list = [
+        {0:1, 1:1},
+        {0:1, 1:2},
+        {0:1, 1:3},
+        {0:1, 1:4},
+        {0:1, 1:5}
+    ]
+
+    thresholds = np.arange(0.4, 0.8, 0.01)
+
+    # -------------------------------
+    # Train and evaluate ensemble for each class weight
+    # -------------------------------
+    results = []
+
+    best_cm = None
+    best_cm_model_info = None
+    best_cm_f1 = 0
+    best_cm_threshold = None
+
+    for cw in class_weights_list:
+        print(f"\nTesting Class Weight: {cw}")
+        rf_models = []
+
+        # Train ensemble models
+        for i, maj_chunk in enumerate(majority_chunks):
+            print(f"Training Model {i+1}/{n_chunks} with class_weight={cw}")
+            balanced_train = pd.concat([maj_chunk, minority_train])
+
+            X_train_bal = balanced_train.drop('Defect', axis=1)
+            X_train_bal = pd.get_dummies(X_train_bal, columns=['Tool_Type'], drop_first=True)
+            X_train_bal = X_train_bal.reindex(columns=X_train_global.columns, fill_value=0)
+            y_train_bal = balanced_train['Defect']
+
+            rf = RandomForestClassifier(
+                n_estimators=2000,
+                max_depth=60,
+                min_samples_split=10,
+                min_samples_leaf=2,
+                class_weight=cw,
+                random_state=67,
+                oob_score=True,
+                n_jobs=-1
+            )
+            rf.fit(X_train_bal, y_train_bal)
+            rf_models.append(rf)
+
+        # Ensemble prediction
+        probas = np.zeros((X_test_global.shape[0], len(rf_models)))
+        for i, rf in enumerate(rf_models):
+            probas[:, i] = rf.predict_proba(X_test_global)[:, 1]
+        avg_probas = probas.mean(axis=1)
+
+        # # Threshold optimization
+        best_f1 = 0
+        best_thresh = 0.5
+        for t in thresholds:
+            y_pred_thresh = (avg_probas >= t).astype(int)
+            f1 = f1_score(y_test_global, y_pred_thresh, zero_division=0)
+            if f1 > best_f1:
+                best_f1 = f1
+                best_thresh = t
+
+        # Final prediction and evaluation
+        y_pred_final = (avg_probas >= best_thresh).astype(int)
+        acc = accuracy_score(y_test_global, y_pred_final)
+        prec = precision_score(y_test_global, y_pred_final, zero_division=0)
+        rec = recall_score(y_test_global, y_pred_final, zero_division=0)
+        f1 = f1_score(y_test_global, y_pred_final, zero_division=0)
+
+        cm = confusion_matrix(y_test_global, y_pred_final)
+
+        # If this model has the best F1, store its confusion matrix
+        if f1 > best_cm_f1:
+            best_cm_f1 = f1
+            best_cm = cm
+            best_cm_threshold = best_thresh
+            best_cm_model_info = cw
+
+
+        # Store results
+        results.append({
+            "class_weight": cw,
+            "threshold": best_thresh,
+            "accuracy": acc,
+            "precision": prec,
+            "recall": rec,
+            "f1": f1
+        })
+
+        # Print current configuration
+        print(f"Best Threshold: {best_thresh:.3f}")
+        print(f"Accuracy: {acc:.4f}")
+        print(f"Precision: {prec:.4f}")
+        print(f"Recall: {rec:.4f}")
+        print(f"F1 Score: {f1:.4f}")
+        print(f"Confusion Matrix:\n{cm}")
 
 # -------------------------------
 # Print summary of all results
