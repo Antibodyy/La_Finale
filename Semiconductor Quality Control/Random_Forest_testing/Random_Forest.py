@@ -37,7 +37,7 @@ train_df = pd.concat([X_train_global, y_train_global], axis=1)
 minority_train = train_df[train_df['Defect'] == 1]
 majority_train = train_df[train_df['Defect'] == 0]
 
-for n_chunks in [3, 4, 5]:
+for n_chunks in [3, 4]:
 
 
     majority_chunks = np.array_split(majority_train, n_chunks)
