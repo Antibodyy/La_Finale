@@ -5,6 +5,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import fbeta_score
 
 # -------------------------------
 # Load dataset
@@ -79,8 +80,8 @@ for n_chunks in [3, 4, 5]:
             y_train_bal = balanced_train['Defect']
 
             rf = RandomForestClassifier(
-                n_estimators=2000,
-                max_depth=60,
+                n_estimators=400,
+                max_depth=30,
                 min_samples_split=10,
                 min_samples_leaf=2,
                 class_weight=cw,
@@ -113,6 +114,7 @@ for n_chunks in [3, 4, 5]:
         prec = precision_score(y_test_global, y_pred_final, zero_division=0)
         rec = recall_score(y_test_global, y_pred_final, zero_division=0)
         f1 = f1_score(y_test_global, y_pred_final, zero_division=0)
+        f2 = fbeta_score(y_test_global, y_pred_final, beta=2, zero_division=0)
 
         cm = confusion_matrix(y_test_global, y_pred_final)
 
@@ -131,7 +133,8 @@ for n_chunks in [3, 4, 5]:
             "accuracy": acc,
             "precision": prec,
             "recall": rec,
-            "f1": f1
+            "f1": f1,
+            "f2": f2
         })
 
         # Print current configuration
@@ -140,6 +143,7 @@ for n_chunks in [3, 4, 5]:
         print(f"Precision: {prec:.4f}")
         print(f"Recall: {rec:.4f}")
         print(f"F1 Score: {f1:.4f}")
+        print(f"F2 Score: {f2:.4f}")
         print(f"Confusion Matrix:\n{cm}")
 
 # -------------------------------
