@@ -1,115 +1,147 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import StratifiedKFold, cross_val_score
+import matplotlib.pyplot as plt
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import make_scorer, fbeta_score, recall_score
-from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+from sklearn.metrics import recall_score, fbeta_score, precision_score, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
 
-# ==========================================
-# 1. CONFIGURATION & DATA LOADING
-# ==========================================
 FILE_PATH = '/Users/aryankulkarni/Documents/UC Berkeley Coursework/SDSE/La_Finale/Semiconductor Quality Control/semiconductor_quality_control.csv'
 RANDOM_STATE = 1
 FOLDS = 4
 
-print(f">>> Loading Data from {FILE_PATH}...")
-df = pd.read_csv(FILE_PATH)
+def load_data(filepath):
+    print(f">>> Loading Data from {filepath}...")
+    df = pd.read_csv(filepath)
+    drop_cols = ['Process_ID', 'Timestamp', 'Wafer_ID', 'Join_Status', 'Defect']
+    X = df.drop(columns=drop_cols)
+    y = df['Defect']
+    X = pd.get_dummies(X, columns=['Tool_Type'], drop_first=True)
+    
+    numerical_cols = ['Chamber_Temperature', 'Gas_Flow_Rate', 'RF_Power', 'Etch_Depth',
+                      'Rotation_Speed', 'Vacuum_Pressure', 'Stage_Alignment_Error',
+                      'Vibration_Level', 'UV_Exposure_Intensity', 'Particle_Count']
+    
+    return X, y, numerical_cols
 
-# Drop identifiers and leakage columns
-drop_cols = ['Process_ID', 'Timestamp', 'Wafer_ID', 'Join_Status', 'Defect']
-X = df.drop(columns=drop_cols)
-y = df['Defect']
 
-# One-Hot Encoding for Categorical 'Tool_Type'
-X = pd.get_dummies(X, columns=['Tool_Type'], drop_first=True)
-
-# Identify numerical columns for Scaling
-numerical_cols = ['Chamber_Temperature', 'Gas_Flow_Rate', 'RF_Power', 'Etch_Depth',
-                  'Rotation_Speed', 'Vacuum_Pressure', 'Stage_Alignment_Error',
-                  'Vibration_Level', 'UV_Exposure_Intensity', 'Particle_Count']
-
-# ==========================================
-# 2. GRID SEARCH SETUP
-# ==========================================
-# We define the grid of hyperparameters to test
-penalties = ['l1', 'l2']
-C_range = np.logspace(-4, 4, 10) # 10 values from 0.0001 to 10000
-
-# Define Custom Scorer for F2 (Recall-Weighted)
-f2_scorer = make_scorer(fbeta_score, beta=2)
-
-print(f"\n>>> Starting Grid Search with {FOLDS}-Fold Cross-Validation...")
-print(f"{'Penalty':<10} {'C_Value':<12} {'Mean_F2':<10} {'Mean_Recall':<12}")
-print("-" * 50)
-
-results = []
-
-# ==========================================
-# 3. THE LOOP
-# ==========================================
-for penalty in penalties:
-    for C in C_range:
-        # A. Create Pipeline
-        # Step 1: Scale ONLY numerical columns (inside the fold)
-        # Step 2: Logistic Regression with specific Penalty/C
+def get_best_threshold(y_true, y_probs, metric='f2'):
+    best_score = 0
+    best_thresh = 0.5
+    
+    for t in np.arange(0.1, 0.96, 0.05):
+        preds = (y_probs >= t).astype(int)
         
-        preprocessor = ColumnTransformer(
-            transformers=[('num', StandardScaler(), numerical_cols)],
-            remainder='passthrough'
-        )
+        if metric == 'f2': 
+            score = fbeta_score(y_true, preds, beta=3)
+        elif metric == 'recall':
+            score = recall_score(y_true, preds)
         
-        pipeline = Pipeline([
-            ('prep', preprocessor),
-            ('clf', LogisticRegression(
-                penalty=penalty, 
-                C=C, 
-                solver='liblinear', # liblinear supports both l1 and l2
-                class_weight='balanced', 
-                max_iter=5000, 
-                random_state=RANDOM_STATE
-            ))
-        ])
+        if score > best_score:
+            best_score = score
+            best_thresh = t
+            
+    return best_thresh, best_score
+
+def run_cv_pipeline():
+    X, y, num_cols = load_data(FILE_PATH)
+    cv = StratifiedKFold(n_splits=FOLDS, shuffle=True, random_state=RANDOM_STATE)
+    results = {}
+    
+    print(f"\n>>> Running {FOLDS}-Fold Cross-Validation on ALL Variants...")
+    
+    # ---------------------------------------------------------
+    # PART A: BASE MODEL (For Vanilla & Caramel)
+    # ---------------------------------------------------------
+    print("\n--- A. Base Logistic Regression (Standard Features) ---")
+    
+    # Pipeline: Scale Num -> Model
+    preprocessor_base = ColumnTransformer(
+        transformers=[('num', StandardScaler(), num_cols)],
+        remainder='passthrough'
+    )
+    
+    pipe_base = Pipeline([
+        ('prep', preprocessor_base),
+        ('clf', LogisticRegression(class_weight='balanced', max_iter=2000, random_state=RANDOM_STATE))
+    ])
+    
+    # Generate Cross-Validated Probabilities
+    # This gives us a prediction for every sample when it was in the TEST fold
+    y_probs_base = cross_val_predict(pipe_base, X, y, cv=cv, method='predict_proba')[:, 1]
+    
+    # --- VARIANT 1: VANILLA (F2 Optimized) ---
+    thresh_vanilla, score_vanilla = get_best_threshold(y, y_probs_base, metric='f2')
+    preds_vanilla = (y_probs_base >= thresh_vanilla).astype(int)
+    results['Vanilla (Base + F2 Opt)'] = confusion_matrix(y, preds_vanilla)
+    
+    print(f"[Vanilla] Best Threshold: {thresh_vanilla:.2f}")
+    print(f"          CV F2-Score:    {score_vanilla:.4f}")
+    print(f"          CV Recall:      {recall_score(y, preds_vanilla):.4f}")
+    
+    # --- VARIANT 2: CARAMEL (Recall Optimized) ---
+    thresh_caramel, score_caramel = get_best_threshold(y, y_probs_base, metric='recall')
+    preds_caramel = (y_probs_base >= thresh_caramel).astype(int)
+    results['Caramel (Base + Recall Opt)'] = confusion_matrix(y, preds_caramel)
+    
+    print(f"[Caramel] Best Threshold: {thresh_caramel:.2f}")
+    print(f"          CV Recall:      {score_caramel:.4f}")
+    print(f"          CV Precision:   {precision_score(y, preds_caramel):.4f}")
+
+    # ---------------------------------------------------------
+    # PART B: POLY MODEL (For Poly Variant)
+    # ---------------------------------------------------------
+    print("\n--- B. Polynomial Logistic Regression (Deg 2 Features) ---")
+    
+    # Pipeline: Poly Num -> Scale -> Model
+    # Note: PolynomialFeatures MUST be inside the pipeline to avoid leakage!
+    poly_pipeline_steps = [
+        ('poly', PolynomialFeatures(degree=2, include_bias=False)),
+        ('scaler', StandardScaler())
+    ]
+    
+    preprocessor_poly = ColumnTransformer(
+        transformers=[('num_poly', Pipeline(poly_pipeline_steps), num_cols)],
+        remainder='passthrough'
+    )
+    
+    pipe_poly = Pipeline([
+        ('prep', preprocessor_poly),
+        ('clf', LogisticRegression(class_weight='balanced', C=0.1, max_iter=3000, random_state=RANDOM_STATE))
+    ])
+    
+    # Generate Cross-Validated Probabilities
+    y_probs_poly = cross_val_predict(pipe_poly, X, y, cv=cv, method='predict_proba')[:, 1]
+    
+    # --- VARIANT 3: POLY (F2 Optimized) ---
+    thresh_poly, score_poly = get_best_threshold(y, y_probs_poly, metric='f2')
+    preds_poly = (y_probs_poly >= thresh_poly).astype(int)
+    results['Poly (Deg2 + F2 Opt)'] = confusion_matrix(y, preds_poly)
+    
+    print(f"[Poly]    Best Threshold: {thresh_poly:.2f}")
+    print(f"          CV F2-Score:    {score_poly:.4f}")
+    print(f"          CV Recall:      {recall_score(y, preds_poly):.4f}")
+
+    # ==========================================
+    # 5. VISUALIZATION (No Seaborn)
+    # ==========================================
+    print("\n>>> Plotting Consolidated Results...")
+    # Create subplots: 1 row, 3 columns
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    
+    for i, (name, cm) in enumerate(results.items()):
+        # Use Sklearn's built-in plotter which uses Matplotlib
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['Safe', 'Defect'])
+        disp.plot(ax=axes[i], cmap='Blues', colorbar=False)
         
-        # B. Run Cross-Validation
-        cv = StratifiedKFold(n_splits=FOLDS, shuffle=True, random_state=RANDOM_STATE)
-        
-        # We compute scores for both metrics
-        f2_scores = cross_val_score(pipeline, X, y, cv=cv, scoring=f2_scorer)
-        rec_scores = cross_val_score(pipeline, X, y, cv=cv, scoring='recall')
-        
-        mean_f2 = np.mean(f2_scores)
-        mean_rec = np.mean(rec_scores)
-        
-        # C. Store & Print
-        results.append({
-            'Penalty': penalty,
-            'C': C,
-            'F2': mean_f2,
-            'Recall': mean_rec
-        })
-        
-        print(f"{penalty:<10} {C:<12.5f} {mean_f2:<10.4f} {mean_rec:<12.4f}")
+        axes[i].set_title(name, fontsize=14, fontweight='bold')
+        axes[i].grid(False) # Turn off grid for cleaner look
+    
+    plt.suptitle(f"Confusion Matrices ({FOLDS}-Fold Cross Validation)", fontsize=16)
+    plt.tight_layout()
+    plt.show()
 
-# ==========================================
-# 4. FINAL RESULTS
-# ==========================================
-results_df = pd.DataFrame(results)
-
-# Find the Best Configurations
-best_f2_idx = results_df['F2'].idxmax()
-best_rec_idx = results_df['Recall'].idxmax()
-
-print("\n" + "="*50)
-print(" WINNING CONFIGURATIONS ")
-print("="*50)
-
-print(f"Best F2 Score:   {results_df.loc[best_f2_idx, 'F2']:.4f}")
-print(f"  -> Params:     Penalty={results_df.loc[best_f2_idx, 'Penalty']}, C={results_df.loc[best_f2_idx, 'C']:.5f}")
-
-print(f"\nBest Recall:     {results_df.loc[best_rec_idx, 'Recall']:.4f}")
-print(f"  -> Params:     Penalty={results_df.loc[best_rec_idx, 'Penalty']}, C={results_df.loc[best_rec_idx, 'C']:.5f}")
-
-# Optional: Save to CSV for your report
-# results_df.to_csv('log_reg_grid_search_results.csv', index=False)
+if __name__ == "__main__":
+    run_cv_pipeline()
