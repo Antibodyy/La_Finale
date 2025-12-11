@@ -75,7 +75,7 @@ for n_chunks in [3, 4]:
 
             rf = RandomForestClassifier(
                 n_estimators=400,
-                max_depth=10,
+                max_depth=30,
                 min_samples_split=10,
                 min_samples_leaf=2,
                 class_weight=cw,
